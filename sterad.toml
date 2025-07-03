@@ -1,0 +1,18 @@
+# config.toml
+# Configuration for the Sterad SSR Caching Server
+
+# Directory where your prebuilt SPA's index.html and other assets reside.
+spa_dist = "./dist"
+
+# The port on which the Bun.js server will listen.
+port = 9081
+
+# A list of URL paths that the server should attempt to cache.
+# If a request comes in for one of these paths, the server will check its cache first.
+cache_routes = ["/*"]
+
+not_cache_routes = ["/s/*", "/b/*", "/api/*"]
+
+# The maximum number of entries to keep in the in-memory cache.
+# When this limit is exceeded, the least recently used entry will be evicted.
+memory_cache_limit = 100
