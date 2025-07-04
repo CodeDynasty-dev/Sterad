@@ -1,6 +1,6 @@
 {
   "name": "sterad",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Host your SPAs with SSR experience, no extra work, gain SEO and Fast Content delivery benefits..",
   "main": "dist/index.js",
   "type": "module",
