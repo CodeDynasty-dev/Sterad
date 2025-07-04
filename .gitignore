@@ -2,5 +2,5 @@
 /dist
 /test
 /node_modules
-test-dist
-CVE-Report.md
+test-dist 
+CWE-Report.md
