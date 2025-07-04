@@ -1,9 +1,6 @@
-// server.ts
-// Sterad: Secure, SSR-style HTML Caching Server for SPAs using Bun.js
-
 import { type BunFile } from "bun";
-import { existsSync, mkdirSync } from "fs"; // Added statSync
-import { join, dirname } from "path"; // Import extname for file extension handling
+import { existsSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
 
 // --- Configuration ---
 // Define the structure for our configuration.
@@ -16,12 +13,11 @@ interface Config {
   memory_cache_limit: number;
 }
 
-// Load and parse sterad.toml using Bun's native TOML parser.
-const configPath = "sterad.toml"; // Changed to sterad.toml
+const configPath = "sterad.toml";
 let config: Config;
 try {
-  const configContent = await Bun.file(configPath).text(); // Reverted to .text()
-  config = Bun.TOML.parse(configContent) as Config; // Reverted to Bun.TOML.parse()
+  const configContent = await Bun.file(configPath).text();
+  config = Bun.TOML.parse(configContent) as Config;
 
   // Set the cache_dir relative to spa_dist as requested.
   config.cache_dir = join(config.spa_dist, ".sterad__cache");
@@ -77,12 +73,11 @@ if (!existsSync(cache_dir)) {
   console.log(`Sterad: Created cache directory at ${cache_dir}`);
 }
 
-// --- In-Memory Cache ---
-const memoryCache = new Map<string, BunFile>(); // path -> HTML content
+const memoryCache = new Map<string, BunFile>();
 
 function addToMemoryCache(path: string, content: BunFile) {
   if (memoryCache.has(path)) {
-    memoryCache.delete(path); // Move to end (most recently used)
+    memoryCache.delete(path);
   }
   memoryCache.set(path, content);
 
@@ -137,7 +132,6 @@ const shouldCachePath = (path: string): boolean => {
   return matchesCache && !matchesNoCache;
 };
 
-// --- Security Functions ---
 function isSafeMainContent(content: string): boolean {
   if (/<script[\s\S]*?>[\s\S]*?<\/script>/i.test(content)) {
     console.warn("Sterad Security: Rejected content due to <script> tags.");
@@ -183,7 +177,6 @@ function sanitizeHtml(content: string): string {
 
 const injectJsScriptContent = `{Sterad-SCRIPT}`;
 
-// --- Load SPA Shell ---
 let spaShellHtml: string;
 let spaHtmlWithInjectScript: string;
 try {
@@ -239,9 +232,7 @@ function findSpaRootElementRegex(htmlContent: string): RegExp | null {
   return /<body[^>]*?>[\s\S]*?<\/body>/i;
 }
 
-// Fast path for static assets
 const isStaticAsset = (path: string) => {
-  // Fast check: if no dot or has query params, not a static file
   const lastDot = path.lastIndexOf(".");
   if (lastDot === -1 || path.includes("?")) return false;
 
@@ -251,7 +242,6 @@ const isStaticAsset = (path: string) => {
   return lastDot > lastSlash && path_difference < 6 && path_difference > 1; // assumes extensions are 1-5 chars
 };
 
-// --- Bun HTTP Server ---
 Bun.serve({
   port: port,
 

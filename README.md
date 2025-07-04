@@ -190,6 +190,17 @@ Sterad implements multiple security layers to prevent XSS and malicious content 
    - Removes event handlers (`onclick`, `onload`, etc.)
    - Disables `javascript:` URIs
 
+### Upcoming Security Fixes
+
+1. Implement DOMPurify for HTML sanitization
+2. Add path normalization with traversal protection
+3. Implement HMAC content signing
+4. Add security headers to all responses
+5. Implement server-side bot detection
+6. Add rate limiting to POST/DELETE endpoints
+
+Without these fixes, Sterad **should not be deployed** in any public-facing environment due to high risk of XSS compromises and cache poisoning attacks.
+
 ## 📊 Performance
 
 Sterad is optimized for high performance with:
