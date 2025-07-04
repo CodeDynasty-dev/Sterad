@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+#!/bin/bash
+
+echo  "  Packing ...."
+npm pack
+mv **.tgz ~/zips && echo "Packed successfully"

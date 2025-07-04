@@ -82,25 +82,10 @@
 
   function captureAndSend() {
     try {
-      // Don't capture if this is a bot or crawler user agent.
-      if (
-        navigator.webdriver || // Detects headless browsers often used by bots
-        /bot|crawler|spider|crawling|googlebot|bingbot|yandexbot|duckduckbot/i.test(
-          navigator.userAgent
-        )
-      ) {
-        console.log(
-          "Sterad: Skipping content capture for detected bot/crawler."
-        );
-        return;
-      }
-
       const contentToCache = getMainContent();
-
       if (!contentToCache || !contentToCache.content) {
         return;
       }
-
       fetch("/__sterad_capture", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

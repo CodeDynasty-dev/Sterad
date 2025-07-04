@@ -1,7 +1,7 @@
 // server.ts
 // Sterad: Secure, SSR-style HTML Caching Server for SPAs using Bun.js
 
-import { BunFile } from "bun";
+import { type BunFile } from "bun";
 import { existsSync, mkdirSync } from "fs"; // Added statSync
 import { join, dirname } from "path"; // Import extname for file extension handling
 
@@ -62,7 +62,14 @@ try {
   process.exit(1); // Exit if config is critical
 }
 
-const { spa_dist, cache_dir, port, cache_routes, memory_cache_limit } = config;
+const {
+  spa_dist,
+  cache_dir,
+  port,
+  cache_routes,
+  not_cache_routes,
+  memory_cache_limit,
+} = config;
 
 // Ensure the cache directory exists.
 if (!existsSync(cache_dir)) {
@@ -80,7 +87,7 @@ function addToMemoryCache(path: string, content: BunFile) {
   memoryCache.set(path, content);
 
   if (memoryCache.size > memory_cache_limit) {
-    const firstKey = memoryCache.keys().next().value;
+    const firstKey = memoryCache.keys().next().value!;
     memoryCache.delete(firstKey);
     console.log(`Sterad: Memory cache limit reached. Evicted: ${firstKey}`);
   }
@@ -116,13 +123,13 @@ function compileCachePatterns(patterns: string[]): RegExp {
 }
 
 // Compile cache patterns at startup
-const CACHE_REGEX = compileCachePatterns(config.cache_routes);
-const NO_CACHE_REGEX = compileCachePatterns(config.not_cache_routes);
+const CACHE_REGEX = compileCachePatterns(cache_routes);
+const NO_CACHE_REGEX = compileCachePatterns(not_cache_routes);
 
 // Fast path for cache checking
 const shouldCachePath = (path: string): boolean => {
   // Always handle root path
-  if (path === "/") return config.cache_routes.includes("/");
+  if (path === "/") return cache_routes.includes("/");
 
   const matchesCache = CACHE_REGEX.test(path);
   const matchesNoCache = NO_CACHE_REGEX.test(path);
@@ -174,7 +181,7 @@ function sanitizeHtml(content: string): string {
   return sanitizedContent.trim();
 }
 
-const injectJsScriptContent = await Bun.file("src/inject.js").text();
+const injectJsScriptContent = `{Sterad-SCRIPT}`;
 
 // --- Load SPA Shell ---
 let spaShellHtml: string;
@@ -275,7 +282,7 @@ Bun.serve({
           });
         } catch (error) {
           console.error(
-            `Sterad: Failed to serve static asset ${path}: ${error.message}`
+            `Sterad: Failed to serve static asset ${path}: ${error}`
           );
           return new Response("Not Found", { status: 404 });
         }
@@ -292,7 +299,7 @@ Bun.serve({
           });
         } catch (error) {
           console.error(
-            `Sterad: Failed to serve from disk cache for ${path}: ${error.message}`
+            `Sterad: Failed to serve from disk cache for ${path}: ${error}`
           );
         }
       }

@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "lib": ["es2022", "esnext", "dom", "dom.iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "removeComments": true,
+    "declaration": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowSyntheticDefaultImports": true,
+    "noFallthroughCasesInSwitch": true,
+    "useUnknownInCatchVariables": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "outDir": "dist"
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "src/assets",
+    "src/typings",
+    "src/__tests__",
+    "src/__mocks__",
+    "src/__fixtures__",
+    "src/inject.ts"
+  ]
+}

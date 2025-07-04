@@ -1,20 +1,20 @@
-# Sterad - Secure SSR-Style Caching for SPAs
-
 <br/>
 <p align="center">
   <a href="https://github.com/codedynasty-dev/sterad">
-    <img src="sterad.png" alt="Logo" width="280" height="280">
+    <img src="https://raw.githubusercontent.com/CodeDynasty-dev/sterad/main/sterad.png" alt="Logo" width="280" height="280">
   </a>
 </p>
 
-**Sterad** is an innovative server solution that brings SEO-friendly server-side rendering capabilities to single-page applications without requiring complex SSR infrastructure. By implementing a unique client-server caching mechanism, Sterad captures rendered SPA content and serves it as static HTML to search engines and subsequent visitors.
+**Sterad** - "_Host your SPAs with SSR experience, no extra work, gain SEO and Fast Content delivery._"
+
+Sterad is an innovative server solution that brings SEO-friendly server-side rendering capabilities to single-page applications without requiring complex SSR infrastructure. By implementing a unique client-server caching mechanism, Sterad captures rendered SPA content and serves it as static HTML to search engines and subsequent visitors.
 
 ## 🌟 Features
 
 - **SEO Optimization**: Serve fully-rendered HTML to crawlers
 - **Progressive Caching**: Builds cache organically as users visit pages
 - **Hybrid Caching**: Memory + disk cache with LRU eviction
-- **Zero Framework Lock-in**: Works with React, Vue, Angular, and others
+- **Zero Framework Lock-in**: Works with React, Vue, Angular, and other SPAs
 - **Minimal Configuration**: Simple TOML-based setup
 - **Lightweight**: <5KB client script with no dependencies
 - **Security Focused**: HTML sanitization and bot detection
@@ -38,28 +38,52 @@ Sterad bridges the gap by providing near-SSR quality for search engines while ma
 
 ```mermaid
 sequenceDiagram
-    participant User as User Browser
+    participant Client as User/Bot Browser
     participant Sterad as Sterad Server
-    participant Cache as Cache Layer
-    participant SPA as SPA Assets
+    participant Cache as Sterad Cache (Memory & Disk)
+    participant SPA as SPA Dist Files
 
-    User->>Sterad: 1. Requests /products
-    Sterad->>Cache: 2. Checks cache
+    Client->>Sterad: 1. Requests Resource (GET /path)
+
+    Sterad->>Cache: 2. Check Memory Cache
     alt Cache Hit
-        Cache-->>Sterad: 3a. Cached HTML
-        Sterad-->>User: Sends cached HTML
+        Cache-->>Sterad: 3a. Return Cached Content
+        Sterad-->>Client: 4a. Serve Cached Content
     else Cache Miss
-        Sterad-->>User: 3b. SPA shell + inject.js
-        User->>User: 4. Renders SPA
-        User->>Sterad: 5. POSTs rendered HTML
-        Sterad->>Cache: 6. Sanitizes & stores HTML
-        Sterad-->>User: Confirmation
+        Sterad->>Sterad: 3b. Is it a Static Asset?
+        alt Yes, Static Asset
+            Sterad->>SPA: 4b. Read Static File
+            alt File Exists
+                SPA-->>Sterad: 5b. Static Content
+                Sterad->>Cache: 6b. Add to Memory Cache
+                Sterad-->>Client: 7b. Serve Static Content
+            else File Not Found
+                Sterad-->>Client: 5c. 404 Not Found
+            end
+        else No, Not Static Asset
+            Sterad->>Sterad: 4c. Should Path Be Cached?
+            alt Yes, Cacheable
+                Sterad->>Cache: 5c. Check Disk Cache
+                alt Disk Cache Hit
+                    Cache-->>Sterad: 6c. Return Cached HTML
+                    Sterad->>Cache: 7c. Add to Memory Cache
+                    Sterad-->>Client: 8c. Serve Cached HTML
+                else Disk Cache Miss
+                    Sterad-->>Client: 6d. Serve SPA Shell + Inject Script
+                    Client->>Sterad: 7d. POST Rendered HTML to /__sterad_capture
+                    Sterad->>Sterad: 8d. Sanitize HTML
+                    Sterad->>Cache: 9d. Write to Disk Cache
+                    Sterad-->>Client: 10d. Confirmation
+                end
+            else No, Not Cacheable
+                Sterad-->>Client: 5d. Serve SPA Shell (No Inject)
+            end
+        end
     end
 
-    Bot->>Sterad: Requests /products
-    Sterad->>Cache: Checks cache
-    Cache-->>Sterad: Cached HTML
-    Sterad-->>Bot: Fully rendered HTML
+    Client->>Sterad: Hard Reload (DELETE /__sterad_capture)
+    Sterad->>Cache: Clear Cache for Path
+    Sterad-->>Client: Confirmation
 ```
 
 ### Core Components

@@ -1,8 +1,8 @@
-# config.toml
+# sterad.toml
 # Configuration for the Sterad SSR Caching Server
 
 # Directory where your prebuilt SPA's index.html and other assets reside.
-spa_dist = "./dist"
+spa_dist = "./test-dist"
 
 # The port on which the Bun.js server will listen.
 port = 9081
