@@ -16,3 +16,35 @@ not_cache_routes = ["/s/*", "/b/*", "/api/*"]
 # The maximum number of entries to keep in the in-memory cache.
 # When this limit is exceeded, the least recently used entry will be evicted.
 memory_cache_limit = 100
+
+# Controls who receives cached content:
+# "crawlers_only" - Only serve cached pages to search engine crawlers and bots
+# "all_clients" - Serve cached pages to both crawlers and regular browsers
+serve_cached_to = "crawlers_only"
+
+# Trust boundary validation settings
+# Maximum HTML content length in bytes (default: 1MB)
+max_content_length = 1048576
+
+# Maximum title length in characters (default: 200)
+max_title_length = 200
+
+# Maximum ratio of HTML tags to content (default: 0.7 = 70%)
+max_tag_ratio = 0.7
+
+# Allowed HTML tags (security whitelist)
+allowed_tags = [
+  "div", "span", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+  "a", "img", "ul", "ol", "li", "br", "strong", "em", "b", "i",
+  "section", "article", "header", "footer", "nav", "main",
+  "table", "tr", "td", "th", "thead", "tbody", "tfoot",
+  "form", "input", "button", "label", "select", "option", "textarea"
+]
+
+# Intercept script for HTML transformation (optional)
+# Path to a script that can transform HTML before caching
+# The script receives JSON via stdin: { html: string, context: InterceptContext }
+# The script should output the transformed HTML to stdout
+# intercept_script = "./scripts/transform-html.js"
+
+

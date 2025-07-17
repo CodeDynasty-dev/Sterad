@@ -134,6 +134,7 @@ sequenceDiagram
 
    # Optional configuration
    not_cache_routes = ["/admin/*", "/api/*"]
+   serve_cached_to = "crawlers_only"  # or "all_clients"
    ```
 
 3. Add build script to your package.json:
@@ -154,15 +155,29 @@ sequenceDiagram
 
 Sterad uses a TOML configuration file with the following options:
 
-| Key                    | Required | Default                | Description                                  |
-| ---------------------- | -------- | ---------------------- | -------------------------------------------- |
-| **spa_dist**           | Yes      | -                      | Path to SPA build directory                  |
-| **port**               | Yes      | -                      | Server port                                  |
-| **cache_routes**       | Yes      | -                      | Route patterns to cache (supports wildcards) |
-| **memory_cache_limit** | Yes      | -                      | Maximum in-memory cache entries              |
-| **not_cache_routes**   | No       | []                     | Routes to exclude from caching               |
-| **cache_dir**          | No       | spa_dist/.sterad_cache | Custom cache directory                       |
-| **sanitization_level** | No       | "strict"               | HTML sanitization level                      |
+| Key                    | Required | Default                | Description                                                   |
+| ---------------------- | -------- | ---------------------- | ------------------------------------------------------------- |
+| **spa_dist**           | Yes      | -                      | Path to SPA build directory                                   |
+| **port**               | Yes      | -                      | Server port                                                   |
+| **cache_routes**       | Yes      | -                      | Route patterns to cache (supports wildcards)                  |
+| **memory_cache_limit** | Yes      | -                      | Maximum in-memory cache entries                               |
+| **not_cache_routes**   | No       | []                     | Routes to exclude from caching                                |
+| **serve_cached_to**    | No       | "crawlers_only"        | Who receives cached content: "crawlers_only" or "all_clients" |
+| **max_content_length** | No       | 1048576 (1MB)          | Maximum HTML content length in bytes                          |
+| **max_title_length**   | No       | 200                    | Maximum title length in characters                            |
+| **max_tag_ratio**      | No       | 0.7 (70%)              | Maximum ratio of HTML tags to content                         |
+| **allowed_tags**       | No       | [whitelist]            | Array of allowed HTML tags for security                       |
+| **intercept_script**   | No       | -                      | Path to script for HTML transformation before caching         |
+| **cache_dir**          | No       | spa_dist/.sterad_cache | Custom cache directory                                        |
+| **sanitization_level** | No       | "strict"               | HTML sanitization level                                       |
+
+### Environment Variables
+
+| Variable         | Required | Default        | Description                                        |
+| ---------------- | -------- | -------------- | -------------------------------------------------- |
+| **JWT_SECRET**   | No       | -              | JWT signing secret for admin routes (min 32 chars) |
+| **JWT_ISSUER**   | No       | "sterad"       | JWT token issuer                                   |
+| **JWT_AUDIENCE** | No       | "sterad-admin" | JWT token audience                                 |
 
 ### Route Pattern Examples
 
@@ -175,6 +190,104 @@ cache_routes = ["/products/*", "/categories/*"]
 
 # Exclude admin routes
 not_cache_routes = ["/admin/*", "/dashboard"]
+```
+
+### Cache Serving Modes
+
+The `serve_cached_to` option controls who receives cached content:
+
+**Crawlers Only Mode (Default)**:
+
+```toml
+serve_cached_to = "crawlers_only"
+```
+
+- Search engines and bots get cached HTML for SEO
+- Regular users get the full SPA experience
+- Best for maintaining SPA interactivity while optimizing SEO
+
+**All Clients Mode**:
+
+```toml
+serve_cached_to = "all_clients"
+```
+
+- Both crawlers and regular users get cached HTML
+- Faster initial page loads for all visitors
+- May reduce SPA interactivity on cached pages
+
+**Detected Bot User Agents**:
+
+- Google Bot, Bing Bot, Yahoo Slurp
+- Facebook, Twitter, LinkedIn crawlers
+- SEO tools (Ahrefs, SEMrush, etc.)
+- Generic patterns: bot, crawler, spider, curl, wget
+
+### HTML Intercept Scripts
+
+Sterad supports custom HTML transformation scripts that run before content is cached:
+
+```toml
+# Enable HTML transformation
+intercept_script = "./scripts/transform-html.js"
+```
+
+**How it works**:
+
+1. After HTML sanitization, Sterad executes your intercept script
+2. The script receives JSON data via stdin with the HTML and context
+3. Your script can transform the HTML and output the result to stdout
+4. The transformed HTML is then cached to disk
+
+**Input Format**:
+
+```json
+{
+  "html": "string", // Complete HTML to be cached
+  "context": {
+    "path": "string", // URL path being cached
+    "title": "string", // Page title
+    "content": "string", // Sanitized main content
+    "originalHtml": "string", // Original SPA shell HTML
+    "timestamp": "number" // Unix timestamp
+  }
+}
+```
+
+**Example Use Cases**:
+
+- Add SEO meta tags dynamically
+- Inject structured data (JSON-LD)
+- Add performance optimization hints
+- Minify HTML output
+- Add analytics or tracking codes
+- Transform content for specific routes
+
+**Security Features**:
+
+- Script path validation (must be within project directory)
+- 5-second execution timeout
+- Output size validation
+- Graceful fallback on script failure
+
+See `scripts/example-intercept.js` for a complete example.
+
+### Admin Authentication
+
+Protected admin routes require JWT authentication:
+
+```bash
+# Set JWT secret (required, min 32 chars)
+export JWT_SECRET="your-super-secure-jwt-secret-key-here"
+
+# Generate admin token
+bun run scripts/generate-jwt-token.js
+
+# Clear cache
+curl -X DELETE "http://localhost:9081/__sterad_capture" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"path": "/page-to-clear"}'
 ```
 
 ## 🛡️ Security Model

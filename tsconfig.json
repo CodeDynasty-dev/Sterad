@@ -5,6 +5,7 @@
     "module": "ESNext",
     "moduleDetection": "force",
     "verbatimModuleSyntax": true,
+    "moduleResolution": "nodenext",
     "strict": true,
     "skipLibCheck": true,
     "removeComments": true,
