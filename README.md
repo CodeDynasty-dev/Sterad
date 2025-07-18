@@ -50,12 +50,140 @@ Sterad operates through a simple three-step process:
 - **Smart Routing**: Crawlers get cached HTML, users get interactive SPA
 - **Security Layer**: Multi-stage HTML sanitization prevents XSS attacks
 
+## Client API
+
+On the client-side (`window.Sterad`) provides programmatic control over caching:
+
+### Methods
+
+#### `triggerCache()`
+
+Manually trigger caching of the current page.
+
+```javascript
+// Trigger manual caching
+window.Sterad.triggerCache()
+  .then((result) => {
+    console.log("Page cached successfully:", result);
+  })
+  .catch((error) => {
+    console.error("Caching failed:", error);
+  });
+```
+
+#### `getCacheInfo()`
+
+Get detailed cache information for the current page.
+
+```javascript
+// Get cache information
+window.Sterad.getCacheInfo().then((info) => {
+  console.log("Cache info:", info);
+  // Returns: { cached: boolean, lastCached: string|null, size?: number, path: string }
+});
+```
+
+#### `isCached()`
+
+Check if the current page is cached.
+
+```javascript
+// Check cache status
+window.Sterad.isCached().then((cached) => {
+  console.log("Page is cached:", cached);
+});
+```
+
+#### `getLastCached()`
+
+Get the last cached timestamp as a Date object.
+
+```javascript
+// Get last cached time
+window.Sterad.getLastCached().then((date) => {
+  if (date) {
+    console.log("Last cached:", date.toISOString());
+  } else {
+    console.log("Page not cached");
+  }
+});
+```
+
+### Usage Examples
+
+**Cache Status Indicator:**
+
+```javascript
+// Show cache status to users
+async function showCacheStatus() {
+  const cached = await window.Sterad.isCached();
+  const lastCached = await window.Sterad.getLastCached();
+
+  if (cached && lastCached) {
+    console.log(`Page cached ${lastCached.toLocaleString()}`);
+  } else {
+    console.log("Page not cached");
+  }
+}
+```
+
+**Manual Cache Control:**
+
+```javascript
+// Cache important pages immediately
+if (window.location.pathname === "/important-page") {
+  window.Sterad.triggerCache()
+    .then(() => console.log("Important page cached"))
+    .catch((err) => console.error("Cache failed:", err));
+}
+```
+
+**Cache Analytics:**
+
+```javascript
+// Track cache performance
+window.Sterad.getCacheInfo().then((info) => {
+  if (info.cached) {
+    // Send analytics event
+    analytics.track("page_served_from_cache", {
+      path: info.path,
+      cache_age: Date.now() - new Date(info.lastCached).getTime(),
+    });
+  }
+});
+```
+
+### TypeScript Support
+
+Full TypeScript declarations are included:
+
+```typescript
+interface SteradAPI {
+  triggerCache(): Promise<any>;
+  getCacheInfo(): Promise<SteradCacheInfo>;
+  isCached(): Promise<boolean>;
+  getLastCached(): Promise<Date | null>;
+}
+
+interface SteradCacheInfo {
+  cached: boolean;
+  lastCached: string | null;
+  size?: number;
+  path: string;
+}
+
+declare global {
+  interface Window {
+    Sterad: SteradAPI;
+  }
+}
+```
+
 ## Installation
 
 ### Prerequisites
 
 - Bun v1.0.0 or newer
-- Built SPA (production build)
 
 ### Setup Process
 
@@ -234,7 +362,7 @@ curl -X DELETE "http://localhost:9081/__sterad_capture" \
 
 ## Security
 
-Sterad implements enterprise-grade security measures:
+Sterad implements well researched security measures:
 
 - **Multi-Layer Sanitization**: Client and server-side HTML sanitization
 - **Path Traversal Protection**: Secure file system access controls
@@ -356,43 +484,29 @@ SKIP_TESTS=true bun bundle.ts
 
 ## Testing
 
-Sterad includes a comprehensive test suite covering all security and functionality features:
-
-### Running Tests
+**149 comprehensive tests** ensure production-ready security and reliability:
 
 ```bash
-# Run all tests
+# Run all tests (6 test suites)
 npm test
 
-# Run with verbose output
-npm run test:verbose
+# Build with integrated testing
+bun bundle.ts
 
-# Run individual test
-bun run tests/test-bot-detection.js
+# Skip tests during build
+SKIP_TESTS=true bun bundle.ts
 ```
 
-### Test Coverage
+**Security Coverage:**
 
-- ✅ **Bot Detection** - User agent parsing and crawler identification
-- ✅ **JWT Authentication** - Bearer token validation for admin routes
-- ✅ **Path Traversal Protection** - File system security and sanitization
-- ✅ **ReDoS Mitigation** - Regular expression timeout protection
-- ✅ **Trust Boundary Validation** - HTML content security and sanitization
-- ✅ **Intercept Script Security** - External script execution safety
+- ✅ Bot Detection & User Agent Parsing
+- ✅ JWT Authentication & Authorization
+- ✅ Path Traversal Protection
+- ✅ ReDoS Mitigation & Regex Safety
+- ✅ Trust Boundary Validation
+- ✅ Intercept Script Security
 
-### Build Integration
-
-Tests automatically run during:
-
-- Development builds (`bun bundle.ts`)
-- Package preparation (`npm run prepack`)
-- CI/CD pipeline (GitHub Actions)
-
-Set `SKIP_TESTS=true` to bypass tests during build.
-
-### Continuous Integration
-
-All tests run automatically on push/PR with multiple Node.js and Bun versions, plus security audits and integration testing.
+**Build Integration:** Tests run automatically before every build, preventing deployment of broken code. CI/CD pipeline includes multi-version testing and security audits.
 
 For support, contact hello@codedynasty.dev.
 
