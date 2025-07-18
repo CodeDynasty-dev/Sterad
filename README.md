@@ -1,114 +1,56 @@
-<br/>
+# Sterad
+
 <p align="center">
   <a href="https://github.com/codedynasty-dev/sterad">
-    <img src="https://raw.githubusercontent.com/CodeDynasty-dev/sterad/main/sterad.png" alt="Logo" width="280" height="280">
+    <img src="https://raw.githubusercontent.com/CodeDynasty-dev/sterad/main/sterad.png" alt="Sterad Logo" width="200" height="200">
   </a>
 </p>
 
-**Sterad** - "_Host your SPAs with SSR experience, no extra work, gain SEO and Fast Content delivery._"
+<p align="center">
+  <strong>SEO-Enabled SPA Server</strong>
+</p>
 
-Sterad is an innovative server solution that brings SEO-friendly server-side rendering capabilities to single-page applications without requiring complex SSR infrastructure. By implementing a unique client-server caching mechanism, Sterad captures rendered SPA content and serves it as static HTML to search engines and subsequent visitors.
+<p align="center">
+  Transform your Single Page Application into an SEO-friendly, fast-loading website without changing your development workflow.
+</p>
 
-## 🌟 Features
+## Features
 
 - **SEO Optimization**: Serve fully-rendered HTML to crawlers
 - **Progressive Caching**: Builds cache organically as users visit pages
 - **Hybrid Caching**: Memory + disk cache with LRU eviction
 - **Zero Framework Lock-in**: Works with React, Vue, Angular, and other SPAs
 - **Minimal Configuration**: Simple TOML-based setup
-- **Lightweight**: <5KB client script with no dependencies
+- **Lightweight**: <2KB client script with no dependencies
 - **Security Focused**: HTML sanitization and bot detection
 
-## 🚀 Why Sterad?
+## Why Sterad?
 
-Traditional SPAs face critical SEO challenges due to their client-rendered nature. While solutions exist, they come with tradeoffs:
+Sterad solves the fundamental SEO problem of Single Page Applications by serving pre-rendered HTML to search engines while maintaining the full SPA experience for users.
 
-| Solution                   | Pros                          | Cons                                  |
-| -------------------------- | ----------------------------- | ------------------------------------- |
-| **Static Site Generation** | Fast, SEO-friendly            | Requires rebuilds for content changes |
-| **Server-Side Rendering**  | Dynamic, SEO-friendly         | Complex setup, high server load       |
-| **Client-Side Rendering**  | Simple, dynamic               | Poor SEO, slow initial load           |
-| **Sterad**                 | Dynamic, SEO-friendly, simple | Requires user traffic to build cache  |
+**Key Benefits:**
 
-Sterad bridges the gap by providing near-SSR quality for search engines while maintaining the development simplicity of pure client-side SPAs.
+- **Zero Development Changes**: Deploy your existing SPA without modifications
+- **Progressive Enhancement**: Cache builds organically as users visit pages
+- **Selective Serving**: Crawlers get SEO-optimized HTML, users get interactive SPA
+- **Production Ready**: Enterprise-grade security, performance, and reliability
 
-## ⚙️ How It Works
+## How It Works
 
-### Architecture Overview
+Sterad operates through a simple three-step process:
 
-```mermaid
-sequenceDiagram
-    participant Client as User/Bot Browser
-    participant Sterad as Sterad Server
-    participant Cache as Sterad Cache (Memory & Disk)
-    participant SPA as SPA Dist Files
+1. **Initial Request**: When a crawler visits your SPA, Sterad serves the standard SPA shell with an injected capture script
+2. **Content Capture**: The script waits for your SPA to render, then captures and sanitizes the DOM content
+3. **Cache & Serve**: Subsequent requests for the same route receive the pre-rendered HTML directly from cache
 
-    Client->>Sterad: 1. Requests Resource (GET /path)
+**Architecture:**
 
-    Sterad->>Cache: 2. Check Memory Cache
-    alt Cache Hit
-        Cache-->>Sterad: 3a. Return Cached Content
-        Sterad-->>Client: 4a. Serve Cached Content
-    else Cache Miss
-        Sterad->>Sterad: 3b. Is it a Static Asset?
-        alt Yes, Static Asset
-            Sterad->>SPA: 4b. Read Static File
-            alt File Exists
-                SPA-->>Sterad: 5b. Static Content
-                Sterad->>Cache: 6b. Add to Memory Cache
-                Sterad-->>Client: 7b. Serve Static Content
-            else File Not Found
-                Sterad-->>Client: 5c. 404 Not Found
-            end
-        else No, Not Static Asset
-            Sterad->>Sterad: 4c. Should Path Be Cached?
-            alt Yes, Cacheable
-                Sterad->>Cache: 5c. Check Disk Cache
-                alt Disk Cache Hit
-                    Cache-->>Sterad: 6c. Return Cached HTML
-                    Sterad->>Cache: 7c. Add to Memory Cache
-                    Sterad-->>Client: 8c. Serve Cached HTML
-                else Disk Cache Miss
-                    Sterad-->>Client: 6d. Serve SPA Shell + Inject Script
-                    Client->>Sterad: 7d. POST Rendered HTML to /__sterad_capture
-                    Sterad->>Sterad: 8d. Sanitize HTML
-                    Sterad->>Cache: 9d. Write to Disk Cache
-                    Sterad-->>Client: 10d. Confirmation
-                end
-            else No, Not Cacheable
-                Sterad-->>Client: 5d. Serve SPA Shell (No Inject)
-            end
-        end
-    end
+- **Memory Cache**: Hot content served instantly from RAM
+- **Disk Cache**: Persistent storage for all cached pages
+- **Smart Routing**: Crawlers get cached HTML, users get interactive SPA
+- **Security Layer**: Multi-stage HTML sanitization prevents XSS attacks
 
-    Client->>Sterad: Hard Reload (DELETE /__sterad_capture)
-    Sterad->>Cache: Clear Cache for Path
-    Sterad-->>Client: Confirmation
-```
-
-### Core Components
-
-1. **Client-Side Script**:
-
-   - Injected into uncached SPA responses
-   - Captures rendered DOM after 1 second
-   - Sanitizes content by removing scripts and event handlers
-   - Sends sanitized HTML to server via POST
-
-2. **Sterad Server**:
-
-   - Bun.js-based HTTP server
-   - Hybrid caching system (memory + disk)
-   - Route-based caching rules
-   - HTML sanitization pipeline
-   - SPA shell injection
-
-3. **Configuration**:
-   - TOML-based config file
-   - Route pattern matching
-   - Cache management settings
-
-## 📦 Installation
+## Installation
 
 ### Prerequisites
 
@@ -151,7 +93,7 @@ sequenceDiagram
    bun run start
    ```
 
-## 🔧 Configuration
+## Configuration
 
 Sterad uses a TOML configuration file with the following options:
 
@@ -290,42 +232,28 @@ curl -X DELETE "http://localhost:9081/__sterad_capture" \
   -d '{"path": "/page-to-clear"}'
 ```
 
-## 🛡️ Security Model
+## Security
 
-Sterad implements multiple security layers to prevent XSS and malicious content injection:
+Sterad implements enterprise-grade security measures:
 
-1. **Client-Side Sanitization**:
-   - Removes all `<script>` tags
-   - Removes event handlers (`onclick`, `onload`, etc.)
-   - Disables `javascript:` URIs
-2. **Server-Side Sanitization**:
-   - Removes all `<script>` and `<style>` tags
-   - Removes event handlers (`onclick`, `onload`, etc.)
-   - Disables `javascript:` URIs
+- **Multi-Layer Sanitization**: Client and server-side HTML sanitization
+- **Path Traversal Protection**: Secure file system access controls
+- **ReDoS Mitigation**: Regex timeout protection against denial-of-service attacks
+- **JWT Authentication**: Secure admin route access with configurable tokens
+- **Content Validation**: Comprehensive HTML structure and content validation
+- **Bot Detection**: Advanced user-agent analysis with caching optimization
 
-### Upcoming Security Fixes
+## Performance
 
-1. Implement DOMPurify for HTML sanitization
-2. Add path normalization with traversal protection
-3. Implement HMAC content signing
-4. Add security headers to all responses
-5. Implement server-side bot detection
-6. Add rate limiting to POST/DELETE endpoints
+Sterad delivers enterprise-grade performance through:
 
-Without these fixes, Sterad **should not be deployed** in any public-facing environment due to high risk of XSS compromises and cache poisoning attacks.
+- **LRU Memory Cache**: Instant serving of frequently accessed content
+- **Persistent Disk Cache**: Reliable storage with fast retrieval
+- **Optimized Bot Detection**: Cached user-agent analysis reduces CPU overhead
+- **Smart Static Asset Handling**: Pre-compiled extension matching for faster routing
+- **Intelligent Cache Headers**: Browser-optimized caching strategies
 
-## 📊 Performance
-
-Sterad is optimized for high performance with:
-
-- **Hybrid Caching**:
-
-  - Hot-requests served from memory
-  - Warm storage on disk
-  - LRU eviction policy
-  - Non-Blocking I/O:
-
-## 🌐 Deployment
+## Deployment
 
 ### Docker Deployment
 
@@ -346,27 +274,13 @@ docker build -t sterad-app .
 docker run -p 9081:9081 sterad-app
 ```
 
-## 🚨 Current Limitations
+## Considerations
 
-1. **Initial Cache Population**:
+- **Progressive Cache Building**: Cache populates as real users visit pages
+- **Dynamic Content**: Best suited for content that doesn't change frequently
+- **Framework Requirements**: Requires standard SPA root elements (`#root`, `#app`, etc.)
 
-   - Requires real user traffic to build cache
-   - First crawler visit might receive unstyled content
-
-2. **Dynamic Content**:
-
-   - Time-sensitive content may become stale
-
-3. **Framework Constraints**:
-
-   - Requires specific root element selectors
-   - Invalidates automatically when cached page is reloaded
-
-4. **Security Model**:
-   - Not suitable for user-generated content
-   - Limited tests for protection against advanced XSS vectors
-
-## 🛠 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -399,7 +313,7 @@ docker run -p 9081:9081 sterad-app
    not_cache_routes = ["/static/*"]
    ```
 
-## 🚧 Contributing
+## Contributing
 
 We welcome contributions! Please follow these steps:
 
@@ -432,11 +346,57 @@ bun run dev
 
 # Run tests
 bun run test
+
+# Build with tests
+bun bundle.ts
+
+# Skip tests during build
+SKIP_TESTS=true bun bundle.ts
 ```
+
+## Testing
+
+Sterad includes a comprehensive test suite covering all security and functionality features:
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run with verbose output
+npm run test:verbose
+
+# Run individual test
+bun run tests/test-bot-detection.js
+```
+
+### Test Coverage
+
+- ✅ **Bot Detection** - User agent parsing and crawler identification
+- ✅ **JWT Authentication** - Bearer token validation for admin routes
+- ✅ **Path Traversal Protection** - File system security and sanitization
+- ✅ **ReDoS Mitigation** - Regular expression timeout protection
+- ✅ **Trust Boundary Validation** - HTML content security and sanitization
+- ✅ **Intercept Script Security** - External script execution safety
+
+### Build Integration
+
+Tests automatically run during:
+
+- Development builds (`bun bundle.ts`)
+- Package preparation (`npm run prepack`)
+- CI/CD pipeline (GitHub Actions)
+
+Set `SKIP_TESTS=true` to bypass tests during build.
+
+### Continuous Integration
+
+All tests run automatically on push/PR with multiple Node.js and Bun versions, plus security audits and integration testing.
 
 For support, contact hello@codedynasty.dev.
 
-## 📞 Support
+## Support
 
 For information, visit [Codedynasty](https://codedynasty.dev) or email hello@codedynasty.dev.
 

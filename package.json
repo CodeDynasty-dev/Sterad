@@ -11,6 +11,12 @@
     "type": "git",
     "url": "git+https://github.com/codedynasty-dev/sterad.git"
   },
+  "author": "friday candour fridaycandours@gmail.com",
+  "license": "Apache",
+  "bugs": {
+    "url": "https://github.com/codedynasty-dev/sterad/issues"
+  },
+  "homepage": "https://github.com/codedynasty-dev/sterad.git",
   "bin": {
     "sterad": "dist/index.js"
   },
@@ -26,18 +32,15 @@
     "caching",
     "seo"
   ],
-  "author": "friday candour fridaycandours@gmail.com",
-  "license": "Apache",
-  "bugs": {
-    "url": "https://github.com/codedynasty-dev/sterad/issues"
-  },
-  "homepage": "https://github.com/codedynasty-dev/sterad.git",
   "scripts": {
     "compile": "./pack",
     "bun": "bun --watch tests/app.jet.ts",
     "watch": "tsc src/*.ts --target esnext --watch",
     "watch:docs": "docmach",
     "build": "npx docmach build",
+    "test": "bun run test-runner.js",
+    "test:verbose": "bun run test-runner.js --verbose",
+    "prepack": "npm run test && tsc && bun bundle.ts && npm run build",
     "prepare": "tsc && bun bundle.ts && npm run build"
   },
   "engines": {
@@ -56,6 +59,7 @@
     "build-directory": "docs/build"
   },
   "dependencies": {
+    "jose": "^5.2.0",
     "quick-lru": "^7.0.1"
   }
 }

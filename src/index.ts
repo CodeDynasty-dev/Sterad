@@ -1,7 +1,8 @@
 import { type BunFile } from "bun";
 import { existsSync, mkdirSync } from "fs";
 import { join, dirname, resolve, relative } from "path";
-import jwt from "jsonwebtoken";
+import { jwtVerify } from "jose";
+import QuickLRU from "quick-lru";
 
 // ReDoS mitigation: Safe regex wrapper with timeout
 function createSafeRegex(
@@ -15,7 +16,7 @@ function createSafeRegex(
   const originalTest = regex.test.bind(regex);
   const originalExec = regex.exec.bind(regex);
 
-  // Override test method with timeout
+  // Override test method with timeoutViolations
   regex.test = function (str: string): boolean {
     return executeWithTimeout(() => originalTest(str), timeoutMs, false);
   };
@@ -134,11 +135,11 @@ function loadJWTConfig(): JWTConfig | null {
   };
 }
 
-// JWT token validation using jsonwebtoken library
-function validateBearerToken(
+// JWT token validation using jose library
+async function validateBearerToken(
   authHeader: string | null,
   jwtConfig: JWTConfig | null
-): boolean {
+): Promise<boolean> {
   if (!jwtConfig) {
     return false;
   }
@@ -149,7 +150,9 @@ function validateBearerToken(
 
   try {
     const token = authHeader.substring(7);
-    jwt.verify(token, jwtConfig.secret, {
+    const secret = new TextEncoder().encode(jwtConfig.secret);
+
+    await jwtVerify(token, secret, {
       issuer: jwtConfig.issuer,
       audience: jwtConfig.audience,
     });
@@ -168,6 +171,34 @@ const securityHeaders = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
   "Strict-Transport-Security": "max-age=63072000",
+};
+
+// Performance-optimized cache headers for different content types
+const getCacheHeaders = (isStatic: boolean, isBot: boolean) => {
+  const baseHeaders = { ...securityHeaders };
+
+  if (isStatic) {
+    // Static assets get long cache times
+    return {
+      ...baseHeaders,
+      "Cache-Control": "public, max-age=31536000, immutable", // 1 year
+      ETag: `"${Date.now()}"`, // Simple ETag for now
+    };
+  } else if (isBot) {
+    // Cached content for bots gets moderate cache time
+    return {
+      ...baseHeaders,
+      "Cache-Control": "public, max-age=3600, s-maxage=86400", // 1 hour browser, 1 day CDN
+    };
+  } else {
+    // SPA content gets no cache to ensure fresh app loads
+    return {
+      ...baseHeaders,
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    };
+  }
 };
 
 let config: Config;
@@ -309,19 +340,13 @@ if (!existsSync(cache_dir)) {
 const spaDistAbsolute = resolve(spa_dist);
 const cacheDirAbsolute = resolve(cache_dir);
 
-const memoryCache = new Map<string, BunFile>();
+// Use LRU cache for better performance than simple Map with FIFO eviction
+const memoryCache = new QuickLRU<string, BunFile>({
+  maxSize: memory_cache_limit,
+});
 
 function addToMemoryCache(path: string, content: BunFile) {
-  if (memoryCache.has(path)) {
-    memoryCache.delete(path);
-  }
   memoryCache.set(path, content);
-
-  if (memoryCache.size > memory_cache_limit) {
-    const firstKey = memoryCache.keys().next().value!;
-    memoryCache.delete(firstKey);
-    console.log(`Sterad: Memory cache limit reached. Evicted: ${firstKey}`);
-  }
 }
 
 // Secure path validation functions
@@ -451,7 +476,7 @@ function getDiskCacheFilePath(urlPath: string): string | null {
 
 function compileCachePatterns(patterns: string[]): RegExp {
   if (patterns.length === 0) {
-    return /^$^/;
+    return createSafeRegex("^$^");
   }
   const regexParts = patterns.map((pattern) => {
     // Handle exact matches (paths without wildcards)
@@ -467,7 +492,7 @@ function compileCachePatterns(patterns: string[]): RegExp {
     if (!regexStr.endsWith("$")) regexStr = regexStr + "$";
     return regexStr;
   });
-  return new RegExp(regexParts.join("|"), "i");
+  return createSafeRegex(regexParts.join("|"), "i");
 }
 
 // Compile cache patterns at startup
@@ -818,7 +843,7 @@ async function executeInterceptScript(
       setTimeout(() => reject(new Error("Intercept script timeout")), timeoutMs)
     );
 
-    const result = await Promise.race([proc.exited, timeoutPromise]);
+    await Promise.race([proc.exited, timeoutPromise]);
 
     if (proc.exitCode !== 0) {
       const stderr = await new Response(proc.stderr).text();
@@ -859,26 +884,149 @@ let spaShellHtml: string;
 let spaHtmlWithInjectScript: string;
 try {
   spaShellHtml = await Bun.file(join(spa_dist, "index.html")).text();
+
+  // Always inject the main script with Sterad API
+  const steradApiScript = `
+    // Sterad API - Available on all pages
+    window.Sterad = {
+      // Trigger manual caching of current page
+      triggerCache: function() {
+        this._manualCacheTriggered = true;
+        
+        // Find main content using the same logic as inject script
+        function findMainContent() {
+          const selectors = [
+            '[data-wrapper="app"]',
+            "#root",
+            "#app", 
+            "#__next",
+            '[role="main"]',
+            "body"
+          ];
+          
+          for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            if (element) return element;
+          }
+          return document.documentElement;
+        }
+        
+        function getMainContent() {
+          try {
+            const mainContentElement = findMainContent();
+            const sanitizedContentClone = mainContentElement.cloneNode(true);
+            
+            // Remove scripts and sanitize
+            const scripts = sanitizedContentClone.querySelectorAll("script");
+            scripts.forEach(script => script.remove());
+            
+            const allElements = sanitizedContentClone.getElementsByTagName("*");
+            for (let i = allElements.length - 1; i >= 0; i--) {
+              const el = allElements[i];
+              const attrs = Array.from(el.attributes);
+              
+              for (let j = attrs.length - 1; j >= 0; j--) {
+                const attr = attrs[j];
+                const attrNameLower = attr.name.toLowerCase();
+                const attrValueLower = typeof attr.value === "string" ? attr.value.toLowerCase() : "";
+                
+                if (attrNameLower.startsWith("on")) {
+                  el.removeAttribute(attr.name);
+                  continue;
+                }
+                
+                if ((attrNameLower === "href" || attrNameLower === "src") && 
+                    attrValueLower.startsWith("javascript:")) {
+                  el.removeAttribute(attr.name);
+                }
+              }
+            }
+            
+            return {
+              title: document.title,
+              content: sanitizedContentClone.innerHTML,
+              url: window.location.pathname + window.location.search
+            };
+          } catch (e) {
+            console.error("Sterad: Error preparing content for caching:", e);
+            return null;
+          }
+        }
+        
+        const contentToCache = getMainContent();
+        if (!contentToCache || !contentToCache.content) {
+          return Promise.reject(new Error("No content to cache"));
+        }
+        
+        return fetch("/__sterad_capture", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: contentToCache.url,
+            title: contentToCache.title,
+            content: contentToCache.content,
+            manual: true
+          }),
+          credentials: "same-origin"
+        }).then(response => {
+          if (response.ok) {
+            console.log("Sterad: Page manually cached successfully");
+            return response.json().catch(() => ({}));
+          } else {
+            throw new Error("Failed to cache page: " + response.status);
+          }
+        });
+      },
+      
+      // Get cache information for current page
+      getCacheInfo: function() {
+        return fetch("/__sterad_cache_info?path=" + encodeURIComponent(window.location.pathname + window.location.search), {
+          method: "GET",
+          credentials: "same-origin"
+        }).then(response => {
+          if (response.ok) {
+            return response.json();
+          } else {
+            return { cached: false, lastCached: null };
+          }
+        });
+      },
+      
+      // Check if current page is cached
+      isCached: function() {
+        return this.getCacheInfo().then(info => info.cached);
+      },
+      
+      // Get last cached timestamp
+      getLastCached: function() {
+        return this.getCacheInfo().then(info => info.lastCached ? new Date(info.lastCached) : null);
+      },
+      
+      _manualCacheTriggered: false
+    };
+    
+    // Detect hard reload (not SPA navigation)
+    window.addEventListener("beforeunload", function (e) {
+      if (performance && performance.getEntriesByType("navigation")[0]?.type === "reload") {
+        // Send DELETE to server to clear cache for this path
+        fetch("/__sterad_capture", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: window.location.pathname + window.location.search }),
+          credentials: "same-origin",
+        });
+      }
+    });
+  `;
+
   spaHtmlWithInjectScript = spaShellHtml.replace(
     "</body>",
-    `<script>${injectJsScriptContent}</script>\n</body>`
+    `<script>${injectJsScriptContent}</script>\n<script>${steradApiScript}</script>\n</body>`
   );
+
   spaShellHtml = spaShellHtml.replace(
     "</body>",
-    `<script>
-    // Detect hard reload (not SPA navigation)
-window.addEventListener("beforeunload", function (e) {
-  if (performance && performance.getEntriesByType("navigation")[0]?.type === "reload") {
-    // Send DELETE to server to clear cache for this path
-    fetch("/__sterad_capture", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: window.location.pathname + window.location.search }),
-      credentials: "same-origin",
-    });
-  }
-});
-    </script>\n</body>`
+    `<script>${steradApiScript}</script>\n</body>`
   );
 } catch (error: any) {
   console.error(
@@ -910,57 +1058,98 @@ function findSpaRootElementRegex(htmlContent: string): RegExp | null {
   return /<body[^>]*?>[\s\S]*?<\/body>/i;
 }
 
+// Pre-compiled set of common static asset extensions for faster lookup
+const STATIC_EXTENSIONS = new Set([
+  ".js",
+  ".css",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".svg",
+  ".ico",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".eot",
+  ".mp4",
+  ".webm",
+  ".mp3",
+  ".wav",
+  ".pdf",
+  ".zip",
+  ".json",
+  ".xml",
+]);
+
 const isStaticAsset = (path: string) => {
   const lastDot = path.lastIndexOf(".");
   if (lastDot === -1 || path.includes("?")) return false;
 
   // Fast check: if the dot is in the last path segment and not too far from the end
   const lastSlash = path.lastIndexOf("/");
-  const path_difference = path.length - lastDot;
-  return lastDot > lastSlash && path_difference < 6 && path_difference > 1; // assumes extensions are 1-5 chars
+  if (lastDot <= lastSlash) return false;
+
+  const extension = path.substring(lastDot).toLowerCase();
+  return STATIC_EXTENSIONS.has(extension);
 };
 
-// Bot detection function with ReDoS protection
+// Pre-compiled bot detection patterns for better performance
+const BOT_PATTERNS = [
+  // Search engine crawlers
+  createSafeRegex("googlebot", "i"),
+  createSafeRegex("bingbot", "i"),
+  createSafeRegex("slurp", "i"), // Yahoo
+  createSafeRegex("duckduckbot", "i"),
+  createSafeRegex("baiduspider", "i"),
+  createSafeRegex("yandexbot", "i"),
+  createSafeRegex("facebookexternalhit", "i"),
+  createSafeRegex("twitterbot", "i"),
+  createSafeRegex("linkedinbot", "i"),
+  createSafeRegex("whatsapp", "i"),
+  createSafeRegex("telegrambot", "i"),
+
+  // SEO and monitoring tools
+  createSafeRegex("ahrefsbot", "i"),
+  createSafeRegex("semrushbot", "i"),
+  createSafeRegex("mj12bot", "i"),
+  createSafeRegex("dotbot", "i"),
+  createSafeRegex("rogerbot", "i"),
+  createSafeRegex("exabot", "i"),
+  createSafeRegex("facebot", "i"),
+  createSafeRegex("ia_archiver", "i"),
+
+  // Generic bot indicators
+  createSafeRegex("bot\\b", "i"),
+  createSafeRegex("crawler", "i"),
+  createSafeRegex("spider", "i"),
+  createSafeRegex("scraper", "i"),
+  createSafeRegex("curl", "i"),
+  createSafeRegex("wget", "i"),
+  createSafeRegex("python-requests", "i"),
+  createSafeRegex("node-fetch", "i"),
+  createSafeRegex("axios", "i"),
+];
+
+// Cache bot detection results to avoid repeated regex operations
+const botDetectionCache = new QuickLRU<string, boolean>({ maxSize: 1000 });
+
+// Bot detection function with caching and ReDoS protection
 function isCrawlerOrBot(userAgent: string): boolean {
   if (!userAgent) return false;
 
-  const botPatterns = [
-    // Search engine crawlers
-    createSafeRegex("googlebot", "i"),
-    createSafeRegex("bingbot", "i"),
-    createSafeRegex("slurp", "i"), // Yahoo
-    createSafeRegex("duckduckbot", "i"),
-    createSafeRegex("baiduspider", "i"),
-    createSafeRegex("yandexbot", "i"),
-    createSafeRegex("facebookexternalhit", "i"),
-    createSafeRegex("twitterbot", "i"),
-    createSafeRegex("linkedinbot", "i"),
-    createSafeRegex("whatsapp", "i"),
-    createSafeRegex("telegrambot", "i"),
+  // Check cache first
+  if (botDetectionCache.has(userAgent)) {
+    return botDetectionCache.get(userAgent)!;
+  }
 
-    // SEO and monitoring tools
-    createSafeRegex("ahrefsbot", "i"),
-    createSafeRegex("semrushbot", "i"),
-    createSafeRegex("mj12bot", "i"),
-    createSafeRegex("dotbot", "i"),
-    createSafeRegex("rogerbot", "i"),
-    createSafeRegex("exabot", "i"),
-    createSafeRegex("facebot", "i"),
-    createSafeRegex("ia_archiver", "i"),
+  // Perform detection
+  const isBot = BOT_PATTERNS.some((pattern) => pattern.test(userAgent));
 
-    // Generic bot indicators
-    createSafeRegex("bot\\b", "i"),
-    createSafeRegex("crawler", "i"),
-    createSafeRegex("spider", "i"),
-    createSafeRegex("scraper", "i"),
-    createSafeRegex("curl", "i"),
-    createSafeRegex("wget", "i"),
-    createSafeRegex("python-requests", "i"),
-    createSafeRegex("node-fetch", "i"),
-    createSafeRegex("axios", "i"),
-  ];
+  // Cache result
+  botDetectionCache.set(userAgent, isBot);
 
-  return botPatterns.some((pattern) => pattern.test(userAgent));
+  return isBot;
 }
 
 Bun.serve({
@@ -969,6 +1158,55 @@ Bun.serve({
   async fetch(request: Request): Promise<Response> {
     const { pathname } = new URL(request.url);
     const method = request.method;
+
+    // Handle cache info endpoint
+    if (method === "GET" && pathname === "/__sterad_cache_info") {
+      const url = new URL(request.url);
+      const queryPath = url.searchParams.get("path");
+
+      if (!queryPath) {
+        return new Response(
+          JSON.stringify({ error: "Missing path parameter" }),
+          {
+            status: 400,
+            headers: { "Content-Type": "application/json", ...securityHeaders },
+          }
+        );
+      }
+
+      const diskCacheFilePath = getDiskCacheFilePath(queryPath);
+      if (diskCacheFilePath) {
+        const diskFile = Bun.file(diskCacheFilePath);
+        if (await diskFile.exists()) {
+          const stats = await diskFile.stat();
+          return new Response(
+            JSON.stringify({
+              cached: true,
+              lastCached: stats.mtime.toISOString(),
+              size: stats.size,
+              path: queryPath,
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+                ...securityHeaders,
+              },
+            }
+          );
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          cached: false,
+          lastCached: null,
+          path: queryPath,
+        }),
+        {
+          headers: { "Content-Type": "application/json", ...securityHeaders },
+        }
+      );
+    }
 
     // Handle GET Requests
     if (method === "GET") {
@@ -982,8 +1220,9 @@ Bun.serve({
       // 1. Try to serve from memory cache (only if we should serve cached content)
       if (shouldServeCached && memoryCache.has(path)) {
         const file = memoryCache.get(path)!;
+        const cacheHeaders = getCacheHeaders(isStaticAsset(path), isBot);
         return new Response(file, {
-          headers: { "Content-Type": file.type, ...securityHeaders },
+          headers: { "Content-Type": file.type, ...cacheHeaders },
         });
       }
 
@@ -1005,8 +1244,9 @@ Bun.serve({
           if (await file.exists()) {
             addToMemoryCache(path, file);
           }
+          const cacheHeaders = getCacheHeaders(true, isBot); // Static assets
           return new Response(file, {
-            headers: { "Content-Type": file.type, ...securityHeaders },
+            headers: { "Content-Type": file.type, ...cacheHeaders },
           });
         } catch (error) {
           console.error(
@@ -1191,7 +1431,7 @@ Bun.serve({
 
       // Check JWT authentication for admin routes
       const authHeader = request.headers.get("Authorization");
-      const isAuthenticated = validateBearerToken(authHeader, jwtConfig);
+      const isAuthenticated = await validateBearerToken(authHeader, jwtConfig);
 
       if (!isAuthenticated) {
         console.warn("Sterad Security: Unauthorized DELETE request blocked");

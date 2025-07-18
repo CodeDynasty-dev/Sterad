@@ -80,19 +80,21 @@
     }
   }
 
-  function captureAndSend() {
+  function captureAndSend(isManual = false) {
     try {
       const contentToCache = getMainContent();
       if (!contentToCache || !contentToCache.content) {
-        return;
+        return Promise.reject(new Error("No content to cache"));
       }
-      fetch("/__sterad_capture", {
+
+      return fetch("/__sterad_capture", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           path: contentToCache.url,
           title: contentToCache.title,
           content: contentToCache.content,
+          manual: isManual,
         }),
         credentials: "same-origin", // Send cookies if on the same origin
       })
@@ -103,26 +105,35 @@
               response.status,
               response.statusText
             );
+            throw new Error(
+              `Cache failed: ${response.status} ${response.statusText}`
+            );
           } else {
             console.log(
               "Sterad: Page content successfully cached by the server."
             );
           }
-          return response.text();
+          return response.json().catch(() => ({}));
         })
         .catch((error) => {
           console.error(
             "Sterad: Network error during page caching attempt:",
             error
           );
+          throw error;
         });
     } catch (e) {
       console.error("Sterad: Unexpected error in captureAndSend:", e);
+      return Promise.reject(e);
     }
   }
 
   function init() {
-    setTimeout(captureAndSend, 1000);
+    // Only auto-capture if not manually triggered
+    // @ts-ignore
+    if (!window.Sterad || !window.Sterad._manualCacheTriggered) {
+      setTimeout(() => captureAndSend(false), 1000);
+    }
   }
 
   if (document.readyState === "loading") {

@@ -1,4 +1,41 @@
 import { readFile, writeFile } from "fs/promises";
+import { spawn } from "child_process";
+
+// Run tests before building (only if not in CI or if explicitly requested)
+const shouldRunTests =
+  process.env.SKIP_TESTS !== "true" && process.env.NODE_ENV !== "production";
+
+if (shouldRunTests) {
+  console.log("Sterad: running tests before build...");
+
+  const testProcess = spawn("bun", ["run", "test-runner.js"], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      NODE_ENV: "test",
+      JWT_SECRET: "test-secret-key-32-characters-long-for-testing-purposes",
+    },
+  });
+
+  const testResult = await new Promise((resolve) => {
+    testProcess.on("close", (code) => {
+      resolve(code);
+    });
+    testProcess.on("error", (error) => {
+      console.error("Test execution failed:", error);
+      resolve(1);
+    });
+  });
+
+  if (testResult !== 0) {
+    console.error("Sterad: Tests failed! Build aborted.");
+    console.error("To skip tests, set SKIP_TESTS=true environment variable.");
+    process.exit(1);
+  }
+
+  console.log("Sterad: All tests passed! Proceeding with build...");
+}
+
 // ? This file does a lot of in just few lines thanks to bunjs
 console.log("Sterad: compiling...");
 await Bun.build({
